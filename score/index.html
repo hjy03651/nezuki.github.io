@@ -266,14 +266,13 @@
         const xCell = note.step * STEP_WIDTH;
         const centerY = note.row * ROW_HEIGHT + ROW_HEIGHT / 2;
     
-        // 한 칸 안에서 60%만 사용 (좌우 20% 여백)
-        const startX = xCell + STEP_WIDTH * 0.2;
-        const endX   = xCell + STEP_WIDTH * 0.8;
+        // ★ 가로 길이 3배로 늘리기
+        const startX = xCell + STEP_WIDTH * 0.1;      // 살짝 안쪽에서 시작
+        const endX   = startX + STEP_WIDTH * 1.8;     // 이전의 약 3배 길이
     
         // 1) 빨간 세로막대 (기음 줄 → 노트 줄)
-        //    기음 줄에 있는 노트라면 세로막대는 생략
         if (note.row !== FUNDAMENTAL_ROW) {
-          const verticalX = startX; // 가로막대 왼쪽 끝에 딱 붙게
+          const verticalX = startX; // 가로막대 왼쪽에 딱 붙게
     
           ctx.strokeStyle = 'rgba(255,120,140,0.9)';
           ctx.lineWidth = 4;
@@ -292,7 +291,6 @@
         ctx.stroke();
       });
     }
-
 
     // ===== 클릭으로 노트 추가 / 삭제 =====
     canvas.addEventListener('click', (e) => {
