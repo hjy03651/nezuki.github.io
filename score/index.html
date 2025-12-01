@@ -110,6 +110,26 @@
       font-size: 11px;
       opacity: 0.8;
     }
+
+    .note-type-group {
+      display: flex;
+      gap: 4px;
+    }
+
+    .note-type-group label {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+    }
+
+    .note-type-group input {
+      accent-color: #34d399;
+    }
   </style>
 </head>
 <body>
@@ -133,10 +153,21 @@
     <div class="toolbar-group">
       <label for="stepsSelect">슬롯/마디</label>
       <select id="stepsSelect">
-        <!-- 한 마디에 몇 칸 넣을지 (기본 4칸 = 4개 노트) -->
         <option value="4" selected>4</option>
         <option value="8">8</option>
       </select>
+    </div>
+
+    <div class="toolbar-group note-type-group">
+      <span class="legend">노트 타입:</span>
+      <label>
+        <input type="radio" name="noteType" value="third" checked />
+        3배음
+      </label>
+      <label>
+        <input type="radio" name="noteType" value="fifth" />
+        5배음
+      </label>
     </div>
 
     <div class="toolbar-group">
@@ -152,7 +183,6 @@
   </div>
 
   <div class="score-wrapper">
-    <!-- 가로/세로 크게 -->
     <canvas id="scoreCanvas" width="3800" height="640"></canvas>
   </div>
 
@@ -161,25 +191,25 @@
     const canvas = document.getElementById('scoreCanvas');
     const ctx = canvas.getContext('2d');
 
-    const ROW_COUNT = 20;          // 세로 칸 수
+    const ROW_COUNT = 20;
     const ROW_HEIGHT = canvas.height / ROW_COUNT;
-    const FUNDAMENTAL_ROW = Math.floor(ROW_COUNT / 2); // 기음 줄
-    const THIRD_OFFSET = 1;                            // 3배음 라인: ±1칸
-    const RATIO_PER_STEP = 3 / 2;          // 이미 있던 3배음 격자 비율
+    const FUNDAMENTAL_ROW = Math.floor(ROW_COUNT / 2);
 
-    // 5배음 비율 (각 한 칸당 5/4배라고 보는 축)
-    const FIFTH_RATIO = 5 / 4;
-    // "3/2 격자"에서 5/4가 몇 칸 높이인지 (세로 길이 비율)
-    const FIFTH_OFFSET_FACTOR = Math.log(FIFTH_RATIO) / Math.log(RATIO_PER_STEP);
-    // 실제 픽셀 단위 길이는 drawNotes() 안에서 ROW_HEIGHT랑 곱해서 씀
+    // 3배음, 5배음 비율
+    const RATIO_THIRD = 3 / 2;
+    const RATIO_FIFTH = 5 / 4;
 
+    // "3배음 그리드"에서 5/4가 차지하는 높이 비율
+    const FIFTH_OFFSET_FACTOR =
+      Math.log(RATIO_FIFTH) / Math.log(RATIO_THIRD);
 
-    const BARS = 16;           // 전체 마디 수 (원하면 늘리기/줄이기)
+    const THIRD_OFFSET = 1; // 기음에서 ±1칸이 3/2, 2/3 라인
+    const BARS = 16;        // 전체 마디 수
 
-    // 노트: {step, row}
+    // 노트: { step, row, type: 'third' | 'fifth' }
     const notes = [];
 
-    // Web Audio
+    // 오디오 관련
     let audioCtx = null;
     let isPlaying = false;
     let playTimer = null;
@@ -194,14 +224,23 @@
     const clearBtn = document.getElementById('clearBtn');
 
     let baseFreq = parseFloat(baseFreqInput.value) || 261.6255653;
-
     baseFreqInput.addEventListener('change', () => {
       const v = parseFloat(baseFreqInput.value);
       if (!isNaN(v) && v > 0) baseFreq = v;
     });
 
-    // 그리드 관련 변수 (슬롯/마디에 따라 갱신)
-    let slotsPerBar = parseInt(stepsSelect.value, 10); // 한 마디에 몇 칸?
+    // 노트 타입 라디오
+    let currentNoteType = 'third';
+    document
+      .querySelectorAll('input[name="noteType"]')
+      .forEach((input) => {
+        input.addEventListener('change', () => {
+          currentNoteType = input.value;
+        });
+      });
+
+    // 그리드(슬롯/마디) 관련
+    let slotsPerBar = parseInt(stepsSelect.value, 10);
     let TOTAL_STEPS = BARS * slotsPerBar;
     let STEP_WIDTH = canvas.width / TOTAL_STEPS;
 
@@ -218,23 +257,20 @@
     function drawGrid() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // 배경
       ctx.fillStyle = '#3f4060';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 가로 줄 (음높이 라인)
+      // 가로 줄
       for (let r = 0; r < ROW_COUNT; r++) {
         const y = r * ROW_HEIGHT + ROW_HEIGHT / 2;
 
         if (r === FUNDAMENTAL_ROW) {
-          // 가운데 기음 줄
           ctx.strokeStyle = 'rgba(255,255,255,0.8)';
           ctx.lineWidth = 2.8;
         } else if (
           r === FUNDAMENTAL_ROW - THIRD_OFFSET ||
           r === FUNDAMENTAL_ROW + THIRD_OFFSET
         ) {
-          // 3배음 / 2/3배음 라인
           ctx.strokeStyle = 'rgba(255,120,140,0.7)';
           ctx.lineWidth = 1.6;
         } else {
@@ -253,11 +289,9 @@
         const x = s * STEP_WIDTH;
 
         if (s % slotsPerBar === 0) {
-          // 마디 시작 (굵은 줄)
           ctx.strokeStyle = 'rgba(255,192,203,0.7)';
           ctx.lineWidth = 2;
         } else {
-          // 마디 안의 슬롯 경계 (얇은 줄)
           ctx.strokeStyle = 'rgba(255,192,203,0.18)';
           ctx.lineWidth = 1;
         }
@@ -268,7 +302,7 @@
         ctx.stroke();
       }
 
-      // 재생 위치 강조
+      // 재생 위치
       if (isPlaying) {
         const x = currentStep * STEP_WIDTH;
         ctx.fillStyle = 'rgba(255,255,255,0.12)';
@@ -281,23 +315,21 @@
     function drawNotes() {
       const fundamentalY =
         FUNDAMENTAL_ROW * ROW_HEIGHT + ROW_HEIGHT / 2;
-    
-      // 5배음 막대의 세로 픽셀 길이 (항상 같은 길이)
       const fifthPixel = ROW_HEIGHT * FIFTH_OFFSET_FACTOR;
-    
+
       notes.forEach((note) => {
-        const xCell = note.step * STEP_WIDTH;
         const centerY = note.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-    
-        // ─ 가로막대 기본 길이: 슬롯 안에서 거의 꽉 차게
+        const xCell = note.step * STEP_WIDTH;
+
+        // 슬롯 내부에서만 노트가 보이게 (90% 폭 사용)
         const marginRatio = 0.05;
-        const baseStartX = xCell + STEP_WIDTH * marginRatio;
-        const baseEndX   = xCell + STEP_WIDTH * (1 - marginRatio);
-    
-        // 1) 빨간 세로막대 (3배음, 기음 줄 → 노트 줄)
-        if (note.row !== FUNDAMENTAL_ROW) {
-          const verticalX = baseStartX; // 가로막대 왼쪽에 딱 붙게
-    
+        const startX = xCell + STEP_WIDTH * marginRatio;
+        const endX   = xCell + STEP_WIDTH * (1 - marginRatio);
+
+        // 3배음 노트 → 빨간 세로막대 (기음 ↔ 노트)
+        if (note.type === 'third' && note.row !== FUNDAMENTAL_ROW) {
+          const verticalX = startX;
+
           ctx.strokeStyle = 'rgba(255,120,140,0.9)';
           ctx.lineWidth = 4;
           ctx.beginPath();
@@ -305,85 +337,90 @@
           ctx.lineTo(verticalX, centerY);
           ctx.stroke();
         }
-    
-        // 2) 초록 세로막대 (5배음, 노트 오른쪽에 달라붙음)
-        //    노트가 기음보다 위에 있으면 아래로, 아래에 있으면 위로 향하게 할게.
-        const greenX = baseEndX; // 가로막대 오른쪽 끝에 붙이기
-        let greenY1, greenY2;
-        if (note.row < FUNDAMENTAL_ROW) {
-          // 높은 음: 위에 있으니까 5/4 차이를 아래쪽으로 표시
-          greenY1 = centerY;
-          greenY2 = centerY + fifthPixel;
-        } else if (note.row > FUNDAMENTAL_ROW) {
-          // 낮은 음: 아래에 있으니까 5/4 차이를 위쪽으로 표시
-          greenY1 = centerY;
-          greenY2 = centerY - fifthPixel;
-        } else {
-          // 기음 줄 자체에 있는 노트면 그냥 위로 그려두자
-          greenY1 = centerY;
-          greenY2 = centerY - fifthPixel;
+
+        // 5배음 노트 → 초록 세로막대 (노트 오른쪽에 달라붙음)
+        let greenX = null;
+        if (note.type === 'fifth') {
+          greenX = endX; // 가로막대 오른쪽 끝
+
+          let y1, y2;
+          if (note.row < FUNDAMENTAL_ROW) {
+            // 높은 음: 아래 방향으로
+            y1 = centerY;
+            y2 = centerY + fifthPixel;
+          } else if (note.row > FUNDAMENTAL_ROW) {
+            // 낮은 음: 위 방향으로
+            y1 = centerY;
+            y2 = centerY - fifthPixel;
+          } else {
+            // 기음 줄: 위로
+            y1 = centerY;
+            y2 = centerY - fifthPixel;
+          }
+
+          ctx.strokeStyle = 'rgba(120, 255, 150, 0.95)';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(greenX, y1);
+          ctx.lineTo(greenX, y2);
+          ctx.stroke();
         }
-    
-        ctx.strokeStyle = 'rgba(120, 255, 150, 0.95)';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(greenX, greenY1);
-        ctx.lineTo(greenX, greenY2);
-        ctx.stroke();
-    
-        // 3) 흰 가로막대
-        //    "가로막대를 놓았을 때 세로막대와 겹치면 줄이고,
-        //     아니면 기본 길이" 조건을 이렇게 해석했어:
-        //    - 기본은 baseStartX ~ baseEndX
-        //    - 하지만 초록 막대(greenX)보다 오른쪽으로 더 나가려고 하면
-        //      거기서 잘라서, 딱 막대에 붙어 끝나도록.
-        let endX = baseEndX;
-        if (endX > greenX) {
-          endX = greenX;   // 세로막대와 겹치지 않게 여기서 잘라줌
+
+        // 흰 가로막대
+        //  - 3배음: 전체 기본 길이
+        //  - 5배음: 초록 막대(greenX)와 딱 맞게 끝나도록
+        let lineEndX = endX;
+        if (note.type === 'fifth' && greenX !== null && lineEndX > greenX) {
+          lineEndX = greenX;
         }
-    
+
         ctx.strokeStyle = '#f9fafb';
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(baseStartX, centerY);
-        ctx.lineTo(endX, centerY);
+        ctx.moveTo(startX, centerY);
+        ctx.lineTo(lineEndX, centerY);
         ctx.stroke();
       });
     }
 
-    // ===== 클릭 → 노트 추가/삭제 =====
+    // ===== 클릭 → 노트 추가 / 삭제 =====
     canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x =
         e.clientX - rect.left + canvas.parentElement.scrollLeft;
       const y = e.clientY - rect.top;
 
-      let step = Math.floor(x / STEP_WIDTH);
+      const step = Math.floor(x / STEP_WIDTH);
       const row = Math.floor(y / ROW_HEIGHT);
-
       if (step < 0 || step >= TOTAL_STEPS) return;
 
+      // 같은 위치, 같은 타입이면 토글 삭제
       const idx = notes.findIndex(
-        (n) => n.step === step && n.row === row
+        (n) => n.step === step && n.row === row && n.type === currentNoteType
       );
       if (idx >= 0) {
         notes.splice(idx, 1);
       } else {
-        notes.push({ step, row });
+        notes.push({ step, row, type: currentNoteType });
       }
 
       drawGrid();
     });
 
-    // ===== 주파수 매핑 (3배음 시스템) =====
-    // FUNDAMENTAL_ROW = baseFreq
-    // 위/아래 한 칸씩 이동할 때마다 3/2배씩 변함
-    function rowToFrequency(row) {
-      const offset = FUNDAMENTAL_ROW - row; // 위로 갈수록 양수
-      return baseFreq * Math.pow(RATIO_PER_STEP, offset);
+    // ===== 주파수 계산 =====
+    function frequencyForNote(note) {
+      const offset = FUNDAMENTAL_ROW - note.row; // 위로 갈수록 양수
+
+      if (note.type === 'third') {
+        // 3배음: 한 칸 ↑ 마다 3/2배, ↓는 2/3배
+        return baseFreq * Math.pow(RATIO_THIRD, offset);
+      } else {
+        // 5배음: 한 칸 ↑ 마다 5/4배, ↓는 4/5배
+        return baseFreq * Math.pow(RATIO_FIFTH, offset);
+      }
     }
 
-    function playNote(row, durationSec) {
+    function playNote(note, durationSec) {
       if (!audioCtx) {
         audioCtx = new (window.AudioContext ||
           window.webkitAudioContext)();
@@ -392,7 +429,7 @@
       const gain = audioCtx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.value = rowToFrequency(row);
+      osc.frequency.value = frequencyForNote(note);
 
       gain.gain.value = 0.18;
       gain.gain.setTargetAtTime(
@@ -418,9 +455,7 @@
 
       const bpm = parseFloat(bpmInput.value) || 120;
 
-      // 한 마디는 항상 4박이라고 두고,
-      // slotsPerBar 가 4면 → 슬롯=4분음표
-      // slotsPerBar 가 8이면 → 슬롯=8분음표
+      // 한 마디 = 4박, slotsPerBar 가 4면 슬롯=4분음표, 8이면 8분음표
       const slotsPerBeat = slotsPerBar / 4;
       const stepDurationSec = 60 / bpm / slotsPerBeat;
 
@@ -432,7 +467,7 @@
           (n) => n.step === currentStep
         );
         currentNotes.forEach((n) => {
-          playNote(n.row, stepDurationSec * 0.95);
+          playNote(n, stepDurationSec * 0.95);
         });
 
         currentStep = (currentStep + 1) % TOTAL_STEPS;
