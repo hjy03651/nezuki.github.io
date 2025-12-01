@@ -229,24 +229,34 @@
         ctx.stroke();
       }
 
-      // 세로 줄 (마디/박 표시)
-      const beatDivision = parseInt(stepsSelect.value, 10);
+            // 세로 줄 (마디/박 표시)
+      const stepsPerUnit = parseInt(stepsSelect.value, 10);
+      
+      // ★ 마디를 기존보다 2배 길게
+      const stepsPerBar  = stepsPerUnit * 2;   // 굵은 세로줄 간격
+      const stepsPerBeat = stepsPerBar / 4;    // 박자 간격 (4박 기준)
+      
       for (let s = 0; s <= STEP_COUNT; s++) {
         const x = s * STEP_WIDTH;
-        if (s % beatDivision === 0) {
+      
+        if (s % stepsPerBar === 0) {
+          // ★ 더 넓어진 마디 시작 줄
           ctx.strokeStyle = 'rgba(255,192,203,0.6)';
           ctx.lineWidth = 2;
-        } else if (s % (beatDivision / 4) === 0) {
+        } else if (s % stepsPerBeat === 0) {
+          // 그 안의 박자 줄
           ctx.strokeStyle = 'rgba(255,192,203,0.25)';
           ctx.lineWidth = 1;
         } else {
           continue;
         }
+      
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
       }
+
 
       // 재생 위치 강조
       if (isPlaying) {
@@ -266,11 +276,9 @@
         const xCell = note.step * STEP_WIDTH;
         const centerY = note.row * ROW_HEIGHT + ROW_HEIGHT / 2;
     
-        // ★ 한 칸 내부에서만 노트가 보이게:
-        //   좌우 5%만 여백, 가운데 90%를 노트로 사용
-        const MARGIN_RATIO = 0.05;
-        const startX = xCell + STEP_WIDTH * MARGIN_RATIO;
-        const endX   = xCell + STEP_WIDTH * (1 - MARGIN_RATIO);
+        // ★ 한 칸 기준으로, 왼쪽 살짝 띄우고 오른쪽으로 1.8칸 정도 길게
+        const startX = xCell + STEP_WIDTH * 0.1;
+        const endX   = startX + STEP_WIDTH * 1.8;
     
         // 1) 빨간 세로막대 (기음 줄 → 노트 줄)
         if (note.row !== FUNDAMENTAL_ROW) {
@@ -284,7 +292,7 @@
           ctx.stroke();
         }
     
-        // 2) 흰 가로막대 (한 칸 안에서만)
+        // 2) 흰 가로막대 (길게)
         ctx.strokeStyle = '#f9fafb';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -293,7 +301,6 @@
         ctx.stroke();
       });
     }
-
 
     // ===== 클릭으로 노트 추가 / 삭제 =====
     canvas.addEventListener('click', (e) => {
