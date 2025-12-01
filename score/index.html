@@ -229,22 +229,19 @@
         ctx.stroke();
       }
 
-            // 세로 줄 (마디/박 표시)
-      const stepsPerUnit = parseInt(stepsSelect.value, 10);
-      
-      // ★ 마디를 기존보다 2배 길게
-      const stepsPerBar  = stepsPerUnit * 2;   // 굵은 세로줄 간격
-      const stepsPerBeat = stepsPerBar / 4;    // 박자 간격 (4박 기준)
+      // ★ 한 마디에 들어갈 노트 수 (4/8/16 ...)
+      const stepsPerBar  = parseInt(stepsSelect.value, 10); // = 노트 개수
+      const stepsPerBeat = stepsPerBar / 4;                 // 4박 기준으로 박자 줄
       
       for (let s = 0; s <= STEP_COUNT; s++) {
         const x = s * STEP_WIDTH;
       
         if (s % stepsPerBar === 0) {
-          // ★ 더 넓어진 마디 시작 줄
+          // 마디 시작 굵은 줄
           ctx.strokeStyle = 'rgba(255,192,203,0.6)';
           ctx.lineWidth = 2;
         } else if (s % stepsPerBeat === 0) {
-          // 그 안의 박자 줄
+          // 가운데 박자 줄
           ctx.strokeStyle = 'rgba(255,192,203,0.25)';
           ctx.lineWidth = 1;
         } else {
@@ -256,7 +253,6 @@
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
       }
-
 
       // 재생 위치 강조
       if (isPlaying) {
