@@ -131,11 +131,11 @@
     </div>
 
     <div class="toolbar-group">
-      <label for="stepsSelect">분할</label>
+      <label for="stepsSelect">슬롯/마디</label>
       <select id="stepsSelect">
-        <option value="8">8 step / 마디</option>
-        <option value="16" selected>16 step / 마디</option>
-        <option value="32">32 step / 마디</option>
+        <!-- 한 마디에 몇 칸 넣을지 (기본 4칸 = 4개 노트) -->
+        <option value="4" selected>4</option>
+        <option value="8">8</option>
       </select>
     </div>
 
@@ -147,12 +147,12 @@
 
     <div class="legend">
       격자를 클릭하면 노트 추가 / 다시 클릭하면 삭제됩니다.
-      (가운데 굵은 줄 = 기음, ±2칸 = 3배음 간격 라인)
+      (가운데 굵은 줄 = 기음, 위 1칸 = 3/2배, 아래 1칸 = 2/3배)
     </div>
   </div>
 
   <div class="score-wrapper">
-    <!-- 가로/세로 모두 크게 -->
+    <!-- 가로/세로 크게 -->
     <canvas id="scoreCanvas" width="3800" height="640"></canvas>
   </div>
 
@@ -162,15 +162,12 @@
     const ctx = canvas.getContext('2d');
 
     const ROW_COUNT = 20;          // 세로 칸 수
-    const STEP_COUNT = 128;        // 가로 스텝 수
-    const STEP_WIDTH = canvas.width / STEP_COUNT;
     const ROW_HEIGHT = canvas.height / ROW_COUNT;
+    const FUNDAMENTAL_ROW = Math.floor(ROW_COUNT / 2); // 기음 줄
+    const THIRD_OFFSET = 1;                            // 3배음 라인: ±1칸
+    const RATIO_PER_STEP = 3 / 2;                      // 한 칸 = 3/2배
 
-    const FUNDAMENTAL_ROW = Math.floor(ROW_COUNT / 2); // 가운데 줄 = 기음
-       // ★ 1칸이 3/2배 음정이 되도록 수정
-    const THIRD_OFFSET = 1;        // 3배음 라인 위치: 기음에서 ±1칸
-    const RATIO_PER_STEP = 3 / 2;  // 한 칸 올라갈 때마다 3/2배
-         // 두 칸 ↑ = 3/2가 되도록
+    const BARS = 16;           // 전체 마디 수 (원하면 늘리기/줄이기)
 
     // 노트: {step, row}
     const notes = [];
@@ -181,7 +178,7 @@
     let playTimer = null;
     let currentStep = 0;
 
-    // UI
+    // UI 요소
     const baseFreqInput = document.getElementById('baseFreqInput');
     const bpmInput = document.getElementById('bpmInput');
     const stepsSelect = document.getElementById('stepsSelect');
@@ -190,10 +187,25 @@
     const clearBtn = document.getElementById('clearBtn');
 
     let baseFreq = parseFloat(baseFreqInput.value) || 261.6255653;
+
     baseFreqInput.addEventListener('change', () => {
       const v = parseFloat(baseFreqInput.value);
       if (!isNaN(v) && v > 0) baseFreq = v;
     });
+
+    // 그리드 관련 변수 (슬롯/마디에 따라 갱신)
+    let slotsPerBar = parseInt(stepsSelect.value, 10); // 한 마디에 몇 칸?
+    let TOTAL_STEPS = BARS * slotsPerBar;
+    let STEP_WIDTH = canvas.width / TOTAL_STEPS;
+
+    function updateGridConfig() {
+      slotsPerBar = parseInt(stepsSelect.value, 10);
+      TOTAL_STEPS = BARS * slotsPerBar;
+      STEP_WIDTH = canvas.width / TOTAL_STEPS;
+      drawGrid();
+    }
+
+    stepsSelect.addEventListener('change', updateGridConfig);
 
     // ===== 그리드 & 노트 그리기 =====
     function drawGrid() {
@@ -208,14 +220,14 @@
         const y = r * ROW_HEIGHT + ROW_HEIGHT / 2;
 
         if (r === FUNDAMENTAL_ROW) {
-          // 기음 라인 (가운데, 굵게)
+          // 가운데 기음 줄
           ctx.strokeStyle = 'rgba(255,255,255,0.8)';
           ctx.lineWidth = 2.8;
         } else if (
           r === FUNDAMENTAL_ROW - THIRD_OFFSET ||
           r === FUNDAMENTAL_ROW + THIRD_OFFSET
         ) {
-          // 3배음 간격 라인 (붉은 옅은 가로선)
+          // 3배음 / 2/3배음 라인
           ctx.strokeStyle = 'rgba(255,120,140,0.7)';
           ctx.lineWidth = 1.6;
         } else {
@@ -229,25 +241,20 @@
         ctx.stroke();
       }
 
-      // ★ 한 마디에 들어갈 노트 수 (4/8/16 ...)
-      const stepsPerBar  = parseInt(stepsSelect.value, 10); // = 노트 개수
-      const stepsPerBeat = stepsPerBar / 4;                 // 4박 기준으로 박자 줄
-      
-      for (let s = 0; s <= STEP_COUNT; s++) {
+      // 세로 줄 (마디 + 슬롯)
+      for (let s = 0; s <= TOTAL_STEPS; s++) {
         const x = s * STEP_WIDTH;
-      
-        if (s % stepsPerBar === 0) {
-          // 마디 시작 굵은 줄
-          ctx.strokeStyle = 'rgba(255,192,203,0.6)';
+
+        if (s % slotsPerBar === 0) {
+          // 마디 시작 (굵은 줄)
+          ctx.strokeStyle = 'rgba(255,192,203,0.7)';
           ctx.lineWidth = 2;
-        } else if (s % stepsPerBeat === 0) {
-          // 가운데 박자 줄
-          ctx.strokeStyle = 'rgba(255,192,203,0.25)';
-          ctx.lineWidth = 1;
         } else {
-          continue;
+          // 마디 안의 슬롯 경계 (얇은 줄)
+          ctx.strokeStyle = 'rgba(255,192,203,0.18)';
+          ctx.lineWidth = 1;
         }
-      
+
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, canvas.height);
@@ -267,19 +274,20 @@
     function drawNotes() {
       const fundamentalY =
         FUNDAMENTAL_ROW * ROW_HEIGHT + ROW_HEIGHT / 2;
-    
+
       notes.forEach((note) => {
-        const xCell = note.step * STEP_WIDTH;
         const centerY = note.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-    
-        // ★ 한 칸 기준으로, 왼쪽 살짝 띄우고 오른쪽으로 1.8칸 정도 길게
-        const startX = xCell + STEP_WIDTH * 0.1;
-        const endX   = startX + STEP_WIDTH * 1.8;
-    
+        const xCell = note.step * STEP_WIDTH;
+
+        // ▶ 노트의 가로 길이: 슬롯 폭의 90% (겹치지 않게)
+        const marginRatio = 0.05;
+        const startX = xCell + STEP_WIDTH * marginRatio;
+        const endX   = xCell + STEP_WIDTH * (1 - marginRatio);
+
         // 1) 빨간 세로막대 (기음 줄 → 노트 줄)
         if (note.row !== FUNDAMENTAL_ROW) {
           const verticalX = startX; // 가로막대 왼쪽에 딱 붙게
-    
+
           ctx.strokeStyle = 'rgba(255,120,140,0.9)';
           ctx.lineWidth = 4;
           ctx.beginPath();
@@ -287,8 +295,8 @@
           ctx.lineTo(verticalX, centerY);
           ctx.stroke();
         }
-    
-        // 2) 흰 가로막대 (길게)
+
+        // 2) 흰 가로막대
         ctx.strokeStyle = '#f9fafb';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -298,15 +306,17 @@
       });
     }
 
-    // ===== 클릭으로 노트 추가 / 삭제 =====
+    // ===== 클릭 → 노트 추가/삭제 =====
     canvas.addEventListener('click', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x =
         e.clientX - rect.left + canvas.parentElement.scrollLeft;
       const y = e.clientY - rect.top;
 
-      const step = Math.floor(x / STEP_WIDTH);
+      let step = Math.floor(x / STEP_WIDTH);
       const row = Math.floor(y / ROW_HEIGHT);
+
+      if (step < 0 || step >= TOTAL_STEPS) return;
 
       const idx = notes.findIndex(
         (n) => n.step === step && n.row === row
@@ -320,11 +330,11 @@
       drawGrid();
     });
 
-    // ===== 주파수 매핑 =====
+    // ===== 주파수 매핑 (3배음 시스템) =====
     // FUNDAMENTAL_ROW = baseFreq
-    // 위/아래로 한 칸 이동할 때마다 √(3/2) 배씩 변하도록 설정
+    // 위/아래 한 칸씩 이동할 때마다 3/2배씩 변함
     function rowToFrequency(row) {
-      const offset = FUNDAMENTAL_ROW - row; // 위로 갈수록 양수 → 더 높은 음
+      const offset = FUNDAMENTAL_ROW - row; // 위로 갈수록 양수
       return baseFreq * Math.pow(RATIO_PER_STEP, offset);
     }
 
@@ -362,9 +372,12 @@
       }
 
       const bpm = parseFloat(bpmInput.value) || 120;
-      const beatDivision = 4;
-      const stepPerBeat = beatDivision;
-      const stepDurationSec = 60 / bpm / (stepPerBeat / 4);
+
+      // 한 마디는 항상 4박이라고 두고,
+      // slotsPerBar 가 4면 → 슬롯=4분음표
+      // slotsPerBar 가 8이면 → 슬롯=8분음표
+      const slotsPerBeat = slotsPerBar / 4;
+      const stepDurationSec = 60 / bpm / slotsPerBeat;
 
       isPlaying = true;
       currentStep = 0;
@@ -377,7 +390,7 @@
           playNote(n.row, stepDurationSec * 0.95);
         });
 
-        currentStep = (currentStep + 1) % STEP_COUNT;
+        currentStep = (currentStep + 1) % TOTAL_STEPS;
         drawGrid();
       }, stepDurationSec * 1000);
 
@@ -401,7 +414,7 @@
     });
 
     // 초기 렌더
-    drawGrid();
+    updateGridConfig();
   </script>
 </body>
 </html>
